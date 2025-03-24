@@ -78,7 +78,7 @@ sort_tasks() {
     fi
 
     # This stores each line of the todo.txt in tasks array, the  -t is for trimming the new line
-    mapfile -t tasks < "$TODO_FILE"
+    mapfile -t tasks < "$TODO_FILE" 
 
     # This calculates the number of elements in array
     local n=${#tasks[@]}
@@ -234,7 +234,6 @@ help_menu() {
     echo
 }
 
-# Modify the case statement to include the help option
 case "$1" in
     -a) shift; add_task "$1" "$2" ;;
     -l) list_tasks ;;
