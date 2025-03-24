@@ -17,10 +17,14 @@ add_task() {
         --low) priority="low" ;;
     esac
 
-    # Generate a unique ID (hash of task + timestamp)
+    # Here I am generating a unique code for each task
+    # 1) Concatenating the task description and current time(in seconds and nanoseconds)
+    # 2) passing the output of this md5sum to compute hash for the string
+    # 3) next the hash is cut to only include first 8 digits of hash using cut
     local task_id
     task_id=$(echo -n "$task$(date +%s%N)" | md5sum | cut -c1-8)
 
+    # appends the task(id:task_description:priority) to the todo.txt
     echo "$task_id:$task:$priority" >> "$TODO_FILE"
     echo "Task added: '$task' (Priority: $priority) [ID: $task_id]"
 }
@@ -30,11 +34,15 @@ add_task() {
 
 
 list_tasks() {
+
+    # for checking if the file exists and has a size greater than 0
     if [[ ! -s "$TODO_FILE" ]]; then
         echo "No tasks available."
         return
     fi
     printf "Tasks Remaining\n\n"
+
+    # used to split the task(id:task_description:priority) on ':' 
     awk -F':' '{printf "%s: %s (Priority: %s)\n", $1, $2, $3}' "$TODO_FILE"
 
     printf "\nTasks Done\n\n"
@@ -48,7 +56,11 @@ remove_task() {
         return
     fi
 
+    # This line checks if the todo.txt has a line starting with given task_id
+    # the grep -q is for quite mode that is it doesn't return any output (just for true and false purpose)
     if grep -q "^$task_id:" "$TODO_FILE"; then
+
+        # This finds the line starting with task_id , the / / define a line and the 'd' at the end is to delete that line
         sed -i "/^$task_id:/d" "$TODO_FILE"
         echo "Task $task_id removed."
     else
@@ -56,28 +68,7 @@ remove_task() {
     fi
 } 
 
-# sort_tasks() {
-#     local n=${#tasks[@]}
 
-#     for ((i = 0; i < n - 1; i++)); do
-#         for ((j = 0; j < n - i - 1; j++)); do
-
-#             local task1="${tasks[j]}"
-#             local task2="${tasks[j+1]}"
-#             local p1="${task1##*:}"
-#             local p2="${task2##*:}"
-
-#             if [[ $(priority_rank "$p1") -lt $(priority_rank "$p2") ]]; then
-#                 temp="${tasks[j]}"
-#                 tasks[j]="${tasks[j+1]}"
-#                 tasks[j+1]="$temp"
-#             fi
-#         done
-#     done
-
-#     echo "Tasks Sorted"
-
-# }
 
 
 sort_tasks() {
@@ -86,15 +77,17 @@ sort_tasks() {
         return
     fi
 
+    # This stores each line of the todo.txt in tasks array, the  -t is for trimming the new line
     mapfile -t tasks < "$TODO_FILE"
 
-    
+    # This calculates the number of elements in array
     local n=${#tasks[@]}
     for ((i = 0; i < n - 1; i++)); do
         for ((j = 0; j < n - i - 1; j++)); do
             task1="${tasks[j]}"
             task2="${tasks[j+1]}"
 
+            # split the task on ':' and then passes only the 3rd parameter (priority) to function priority rank
             p1=$(priority_rank "$(echo "$task1" | awk -F':' '{print $3}')")
             p2=$(priority_rank "$(echo "$task2" | awk -F':' '{print $3}')")
 
@@ -117,6 +110,7 @@ clear_tasks() {
         return
     fi
 
+    # Used to empty the both todo.txt, done.txt
     > "$TODO_FILE"
     > "$DONE_FILE"
     echo "All tasks cleared."
@@ -131,52 +125,7 @@ priority_rank() {
     esac
 }
 
-# update_task() {
-#     local update_task_id="$1"
-#     local found=0
 
-#     for i in "${!tasks[@]}"; do
-#         task="${tasks[i]}"
-#         task_id="${task%%:*}"
-
-#         if [[ "$task_id" == "$update_task_id" ]]; then  
-#             found=1
-
-#             echo "Choose what you want to update"
-#             echo "1: Task"
-#             echo "2: Priority"
-#             echo "3: Both"
-
-#             read -p "Enter your choice: " choice
-
-#             if [[ $choice == 1 ]]; then
-#                 read -p "Enter updated task: " new_task
-#                 id="$(echo "$task" | cut -d':' -f1)"
-#                 priority="$(echo "$task" | cut -d':' -f3)"
-#                 tasks[i]="$id:$new_task:$priority"
-            
-#             elif [[ $choice == 2 ]]; then
-#                 read -p "Enter updated priority (high/medium/low): " new_priority
-#                 id="$(echo "$task" | cut -d':' -f1)"
-#                 task_original="$(echo "$task" | cut -d':' -f2)"
-#                 tasks[i]="$id:$task_original:$new_priority"
-            
-#             elif [[ $choice == 3 ]]; then
-#                 read -p "Enter updated task: " new_task
-#                 read -p "Enter updated priority (high/medium/low): " new_priority
-#                 id="$(echo "$task" | cut -d':' -f1)"
-#                 tasks[i]="$id:$new_task:$new_priority"
-#             else
-#                 echo "Invalid Choice"
-#             fi
-#             break
-#         fi
-#     done
-
-#     if [[ $found -eq 0 ]]; then
-#         echo "Task ID $update_task_id not found."
-#     fi
-# }
 
 update_task() {
     local update_task_id="$1"
@@ -194,7 +143,11 @@ update_task() {
         read -p "Enter your choice: " choice
         if [[ $choice == 1 ]]; then
             read -p "Enter updated task: " new_task
+
+            # using grep to detect a line starting with task_id and cutting on the third parameter(priority)
             local priority=$(grep "^$update_task_id:" "$TODO_FILE" | cut -d: -f3)
+
+            # used for replacing the old task with new task
             sed -i "s/^$update_task_id:.*:$priority\$/$update_task_id:$new_task:$priority/" "$TODO_FILE"
         
         elif [[ $choice == 2 ]]; then
@@ -221,6 +174,11 @@ deduplicate_tasks() {
         return
     fi
 
+    # awk -f splits the each line of todo.txt
+    # seen is an associative array (key:value), if the second parameter(task_description) on a line is seen the value of that line
+    # here line is the key and number of times it is seen is value, so if a task_description is seen first time, it is moved
+    # to temp.txt and if seen more than 0 times no action
+    #after this process we rename the temp.txt as todo.txt
     awk -F':' '!seen[$2]++' "$TODO_FILE" > temp.txt && mv temp.txt "$TODO_FILE"
 
     echo "Duplicate tasks removed, keeping the first occurrence."
@@ -239,7 +197,7 @@ task_done() {
         local task_entry=$(grep "^$task_id:" "$TODO_FILE")
         echo "$task_entry" >> "$DONE_FILE"
 
-        # Remove from TODO_FILE
+        # to remove the line from todo.txt
         sed -i "/^$task_id:/d" "$TODO_FILE"
 
         echo "Task $task_id marked as done"
@@ -250,23 +208,6 @@ task_done() {
 
 
 
-
-
-
-# add_task "buy wheat" --low
-# add_task "Buy groceries" --high
-# add_task "Do laundry" --medium
-# add_task "Read a book"
-# add_task "s1" --medium
-# add_task "s2" --high
-# add_task "s3" --high
-
-
-
-# list_tasks
-# update_task 3
-
-# list_tasks
 
 help_menu() {
     echo "Usage: ./todo_list.sh [OPTION] [ARGUMENTS]"
@@ -282,14 +223,14 @@ help_menu() {
     echo "  -dn ID                 Mark a task as done"
     echo
     echo "Examples:"
-    echo "  todo.sh -a \"Finish project\" --high   # Add a high-priority task"
-    echo "  todo.sh -l                           # List all tasks"
-    echo "  todo.sh -r 1234                      # Remove task with ID 1234"
-    echo "  todo.sh -s                           # Sort tasks by priority"
-    echo "  todo.sh -c                           # Clear all tasks"
-    echo "  todo.sh -u 1234                      # Update task 1234"
-    echo "  todo.sh -de                          # Remove duplicate tasks"
-    echo "  todo.sh -dn 1234                     # Mark task 1234 as done"
+    echo "  ./todo_list.sh -a \"Finish project\" --high   # Add a high-priority task"
+    echo "  ./todo_list.sh -l                           # List all tasks"
+    echo "  ./todo_list.sh -r 1234                      # Remove task with ID 1234"
+    echo "  ./todo_list.sh -s                           # Sort tasks by priority"
+    echo "  ./todo_list.sh -c                           # Clear all tasks"
+    echo "  ./todo_list.sh -u 1234                      # Update task 1234"
+    echo "  ./todo_list.sh -de                          # Remove duplicate tasks"
+    echo "  ./todo_list.sh -dn 1234                     # Mark task 1234 as done"
     echo
 }
 
